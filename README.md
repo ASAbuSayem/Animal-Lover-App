@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # animal_lover
 
 A new Flutter project.
@@ -15,3 +16,7 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+# Animal-Lover-App
+AI-powered pet care Android app built with Flutter &amp; Firebase. Features Gemini AI symptom checker, personalized care planner, pet adoption feed, and real-time health reminders.
+>>>>>>> 0d0845abf3fe50de741c627aaec722d5aef67b85
