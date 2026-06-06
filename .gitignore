@@ -45,3 +45,5 @@ app.*.map.json
 /android/app/release
 lib/core/constants/api_constants.dart
 lib/firebase_options.dart
+android/key.properties
+android/app/upload-keystore.jks

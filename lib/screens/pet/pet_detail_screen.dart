@@ -86,7 +86,7 @@ class PetDetailScreen extends StatelessWidget {
                         shape: BoxShape.circle),
                     child: Icon(_typeIcon, size: 44, color: _typeColor)),
                 const SizedBox(height: 14),
-                Text('${_typeEmoji} ${pet.name}',
+                Text('$_typeEmoji ${pet.name}',
                     style: GoogleFonts.nunito(
                         fontSize: 24,
                         fontWeight: FontWeight.w800,

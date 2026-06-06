@@ -65,7 +65,7 @@ class NotificationsScreen extends StatelessWidget {
                   Container(
                       width: 80,
                       height: 80,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                           color: _greenLight, shape: BoxShape.circle),
                       child: const Icon(Icons.notifications_none_rounded,
                           size: 40, color: _green)),

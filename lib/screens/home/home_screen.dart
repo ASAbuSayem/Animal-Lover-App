@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../adopt/adoption_screen.dart';
+import '../adopt/adoption_requests_screen.dart';
 import '../blog/blog_screen.dart';
 import '../profile/profile_screen.dart';
 import '../ai/symptom_checker_screen.dart';
@@ -10,6 +11,7 @@ import '../ai/care_planner_screen.dart';
 import '../pet/add_pet_screen.dart';
 import '../pet/pet_detail_screen.dart';
 import '../../services/pet_service.dart';
+import '../../services/adoption_request_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -141,8 +143,6 @@ class _AiCareMenuPage extends StatelessWidget {
               Text('Smart tools for your pet\'s health',
                   style: GoogleFonts.nunito(fontSize: 13, color: _textMuted)),
               const SizedBox(height: 24),
-
-              // Banner
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -176,7 +176,6 @@ class _AiCareMenuPage extends StatelessWidget {
                       size: 48, color: Colors.white),
                 ]),
               ),
-
               const SizedBox(height: 20),
               Text('Choose a tool',
                   style: GoogleFonts.nunito(
@@ -184,7 +183,6 @@ class _AiCareMenuPage extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                       color: _textMain)),
               const SizedBox(height: 14),
-
               _aiCard(
                 context,
                 icon: Icons.medical_services_rounded,
@@ -201,7 +199,6 @@ class _AiCareMenuPage extends StatelessWidget {
                         builder: (_) => const SymptomCheckerScreen())),
               ),
               const SizedBox(height: 14),
-
               _aiCard(
                 context,
                 icon: Icons.calendar_today_rounded,
@@ -217,7 +214,6 @@ class _AiCareMenuPage extends StatelessWidget {
                         builder: (_) => const CarePlannerScreen())),
               ),
               const SizedBox(height: 24),
-
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -340,7 +336,6 @@ class _HomePage extends StatelessWidget {
     ));
   }
 
-  // Pet type helpers
   Color _petColor(String type) => switch (type) {
         'Dog' => const Color(0xFFEA580C),
         'Cat' => const Color(0xFF8B5CF6),
@@ -408,6 +403,7 @@ class _HomePage extends StatelessWidget {
     );
   }
 
+  // ── Top bar with notification badge ────────────
   Widget _buildTopBar(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -420,30 +416,86 @@ class _HomePage extends StatelessWidget {
               style: GoogleFonts.nunito(fontSize: 13, color: _textMuted)),
         ]),
         Row(children: [
-          _iconBtn(Icons.notifications_outlined,
-              () => _showSnack(context, 'No new notifications 🔔')),
+          // ── Notification bell with badge ──
+          StreamBuilder<int>(
+            stream: AdoptionRequestService.pendingCountStream(),
+            builder: (_, snap) {
+              final count = snap.data ?? 0;
+              return GestureDetector(
+                onTap: () {
+                  if (count > 0) {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const AdoptionRequestsScreen()));
+                  } else {
+                    _showSnack(context, 'No new notifications 🔔');
+                  }
+                },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                          color: count > 0
+                              ? const Color(0xFFFFF0E6)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: count > 0
+                                  ? const Color(0xFFEA580C)
+                                      .withValues(alpha: 0.3)
+                                  : const Color(0xFFE5F0EA))),
+                      child: Icon(
+                          count > 0
+                              ? Icons.notifications_active_rounded
+                              : Icons.notifications_outlined,
+                          size: 20,
+                          color:
+                              count > 0 ? const Color(0xFFEA580C) : _textMuted),
+                    ),
+                    if (count > 0)
+                      Positioned(
+                        top: -4,
+                        right: -4,
+                        child: Container(
+                            width: 18,
+                            height: 18,
+                            decoration: const BoxDecoration(
+                                color: Color(0xFFEA580C),
+                                shape: BoxShape.circle),
+                            child: Center(
+                                child: Text('$count',
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700)))),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
           const SizedBox(width: 8),
-          _iconBtn(
-              Icons.add_circle_outline_rounded,
-              () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const AddPetScreen()))),
+          // Add pet button
+          GestureDetector(
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const AddPetScreen())),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE5F0EA))),
+              child: const Icon(Icons.add_circle_outline_rounded,
+                  size: 20, color: Color(0xFF6B8F80)),
+            ),
+          ),
         ]),
       ],
-    );
-  }
-
-  Widget _iconBtn(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE5F0EA))),
-        child: Icon(icon, size: 20, color: _textMuted),
-      ),
     );
   }
 
@@ -506,7 +558,6 @@ class _HomePage extends StatelessWidget {
       style: GoogleFonts.nunito(
           fontSize: 16, fontWeight: FontWeight.w800, color: _textMain));
 
-  // ── Real pets from Firestore ──────────────────
   Widget _buildPetRow(BuildContext context) {
     return StreamBuilder<List<Pet>>(
       stream: PetService.petsStream(),
@@ -520,7 +571,6 @@ class _HomePage extends StatelessWidget {
               ...pets.map((pet) => Padding(
                     padding: const EdgeInsets.only(right: 12),
                     child: GestureDetector(
-                      // ← Click opens Pet Detail screen
                       onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -545,7 +595,6 @@ class _HomePage extends StatelessWidget {
     );
   }
 
-  // ── Real upcoming care from Firestore ──────────
   Widget _buildUpcomingSection() {
     return StreamBuilder<List<Pet>>(
       stream: PetService.petsStream(),

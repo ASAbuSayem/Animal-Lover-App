@@ -4,7 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/pet_service.dart';
 import '../../services/ai_session_service.dart';
 import '../../services/saved_posts_service.dart';
+import '../../services/adoption_request_service.dart';
 import '../pet/my_pets_screen.dart';
+import '../adopt/adoption_requests_screen.dart';
 import 'notifications_screen.dart';
 import 'privacy_screen.dart';
 import 'saved_posts_screen.dart';
@@ -162,17 +164,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(children: [
-        // My Pets count
         StreamBuilder<List<Pet>>(
           stream: PetService.petsStream(),
           builder: (_, snap) => Expanded(
               child: _statCard('${snap.data?.length ?? 0}', 'My Pets',
                   Icons.pets_rounded, _green, _greenLight)),
         ),
-
         const SizedBox(width: 12),
-
-        // Saved Posts count
         StreamBuilder<int>(
           stream: SavedPostsService.savedCountStream(),
           builder: (_, snap) => Expanded(
@@ -183,10 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Color(0xFFE11D48),
                   const Color(0xFFFFF1F2))),
         ),
-
         const SizedBox(width: 12),
-
-        // AI Sessions count
         StreamBuilder<int>(
           stream: AiSessionService.sessionCountStream(),
           builder: (_, snap) => Expanded(
@@ -239,7 +234,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   MaterialPageRoute(builder: (_) => const MyPetsScreen()))),
           _divider(),
 
-          // AI history → AiHistoryScreen
+          // Adoption requests — with live badge
+          StreamBuilder<int>(
+            stream: AdoptionRequestService.pendingCountStream(),
+            builder: (_, snap) {
+              final count = snap.data ?? 0;
+              return _menuItemWithBadge(
+                  Icons.favorite_border_rounded,
+                  'Adoption requests',
+                  'Incoming requests for your pets',
+                  const Color(0xFFEA580C),
+                  const Color(0xFFFFF0E6),
+                  badge: count > 0 ? '$count' : null,
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const AdoptionRequestsScreen())));
+            },
+          ),
+          _divider(),
+
+          // AI history
           _menuItem(
               Icons.history_rounded,
               'AI history',
@@ -250,7 +265,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   MaterialPageRoute(builder: (_) => const AiHistoryScreen()))),
           _divider(),
 
-          // Saved posts → SavedPostsScreen
+          // Saved posts
           _menuItem(
               Icons.favorite_rounded,
               'Saved posts',
@@ -331,6 +346,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
               color: isDestructive
                   ? const Color(0xFFDC2626).withValues(alpha: 0.5)
                   : const Color(0xFFB0C4BC)),
+        ]),
+      ),
+    );
+  }
+
+  // Menu item with notification badge
+  Widget _menuItemWithBadge(
+      IconData icon, String title, String subtitle, Color fg, Color bg,
+      {required VoidCallback onTap, String? badge}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(children: [
+          Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                  color: bg, borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, size: 20, color: fg)),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: GoogleFonts.nunito(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _textMain)),
+                Text(subtitle,
+                    style: GoogleFonts.nunito(fontSize: 11, color: _textMuted)),
+              ],
+            ),
+          ),
+          if (badge != null)
+            Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFEA580C),
+                    borderRadius: BorderRadius.circular(20)),
+                child: Text(badge,
+                    style: GoogleFonts.nunito(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white)))
+          else
+            const Icon(Icons.chevron_right_rounded,
+                size: 20, color: Color(0xFFB0C4BC)),
         ]),
       ),
     );

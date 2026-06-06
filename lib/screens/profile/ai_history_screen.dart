@@ -77,9 +77,8 @@ class AiHistoryScreen extends StatelessWidget {
                   Container(
                       width: 80,
                       height: 80,
-                      decoration: BoxDecoration(
-                          color: const Color(0xFFF3EFFE),
-                          shape: BoxShape.circle),
+                      decoration: const BoxDecoration(
+                          color: Color(0xFFF3EFFE), shape: BoxShape.circle),
                       child: const Icon(Icons.smart_toy_outlined,
                           size: 40, color: Color(0xFF8B5CF6))),
                   const SizedBox(height: 16),

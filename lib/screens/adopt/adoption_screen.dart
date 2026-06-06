@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../services/adoption_post_service.dart';
 import '../../services/saved_posts_service.dart';
+import '../../services/adoption_request_service.dart';
+import 'create_adoption_post_screen.dart';
+import 'adoption_requests_screen.dart';
 
 class AdoptionScreen extends StatefulWidget {
   const AdoptionScreen({super.key});
@@ -13,6 +18,7 @@ class _AdoptionScreenState extends State<AdoptionScreen>
   String _selectedFilter = 'All';
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
+  final Set<String> _savedIds = {};
 
   late final AnimationController _fadeCtrl;
   late final Animation<double> _fadeAnim;
@@ -23,122 +29,28 @@ class _AdoptionScreenState extends State<AdoptionScreen>
   static const _textMain = Color(0xFF0A2E24);
   static const _textMuted = Color(0xFF6B8F80);
 
-  final List<Map<String, dynamic>> _allPets = [
-    {
-      'name': 'Buddy',
-      'type': 'Dog',
-      'breed': 'Labrador Mix',
-      'age': '2 years',
-      'gender': 'Male',
-      'location': 'Dhaka',
-      'description':
-          'Friendly and playful Labrador mix looking for a loving home. Good with kids and other pets.',
-      'color': const Color(0xFFEA580C),
-      'bg': const Color(0xFFFFF0E6),
-      'icon': Icons.pets_rounded,
-      'saved': false,
-      'vaccinated': true,
-      'neutered': false,
-    },
-    {
-      'name': 'Whiskers',
-      'type': 'Cat',
-      'breed': 'Persian',
-      'age': '1 year',
-      'gender': 'Female',
-      'location': 'Sylhet',
-      'description':
-          'Beautiful Persian cat, very calm and affectionate. Loves cuddles and indoor living.',
-      'color': const Color(0xFF8B5CF6),
-      'bg': const Color(0xFFF3EFFE),
-      'icon': Icons.catching_pokemon_rounded,
-      'saved': false,
-      'vaccinated': true,
-      'neutered': true,
-    },
-    {
-      'name': 'Rocky',
-      'type': 'Dog',
-      'breed': 'German Shepherd',
-      'age': '3 years',
-      'gender': 'Male',
-      'location': 'Chittagong',
-      'description':
-          'Intelligent and loyal German Shepherd. Trained, vaccinated, and ready for a new family.',
-      'color': const Color(0xFF0891B2),
-      'bg': const Color(0xFFE0F7FA),
-      'icon': Icons.pets_rounded,
-      'saved': false,
-      'vaccinated': true,
-      'neutered': false,
-    },
-    {
-      'name': 'Luna',
-      'type': 'Cat',
-      'breed': 'Siamese',
-      'age': '6 months',
-      'gender': 'Female',
-      'location': 'Rajshahi',
-      'description':
-          'Playful Siamese kitten who loves attention and playtime. Very social and curious.',
-      'color': const Color(0xFF8B5CF6),
-      'bg': const Color(0xFFF3EFFE),
-      'icon': Icons.catching_pokemon_rounded,
-      'saved': false,
-      'vaccinated': false,
-      'neutered': false,
-    },
-    {
-      'name': 'Max',
-      'type': 'Dog',
-      'breed': 'Golden Retriever',
-      'age': '4 years',
-      'gender': 'Male',
-      'location': 'Dhaka',
-      'description':
-          'Sweet Golden Retriever, excellent with children. House-trained and loves outdoor activities.',
-      'color': const Color(0xFFEA580C),
-      'bg': const Color(0xFFFFF0E6),
-      'icon': Icons.pets_rounded,
-      'saved': false,
-      'vaccinated': true,
-      'neutered': true,
-    },
-    {
-      'name': 'Mochi',
-      'type': 'Rabbit',
-      'breed': 'Holland Lop',
-      'age': '8 months',
-      'gender': 'Female',
-      'location': 'Dhaka',
-      'description':
-          'Adorable Holland Lop rabbit, very gentle and quiet. Perfect for apartment living.',
-      'color': const Color(0xFF16A34A),
-      'bg': const Color(0xFFE1F5EE),
-      'icon': Icons.cruelty_free_rounded,
-      'saved': false,
-      'vaccinated': false,
-      'neutered': false,
-    },
-  ];
+  Color _typeColor(String type) => switch (type) {
+        'Dog' => const Color(0xFFEA580C),
+        'Cat' => const Color(0xFF8B5CF6),
+        'Bird' => const Color(0xFF0891B2),
+        'Rabbit' => const Color(0xFF16A34A),
+        _ => _green,
+      };
 
-  List<Map<String, dynamic>> get _filtered {
-    return _allPets.where((pet) {
-      final matchFilter =
-          _selectedFilter == 'All' || pet['type'] == _selectedFilter;
-      final matchSearch = _searchQuery.isEmpty ||
-          (pet['name'] as String)
-              .toLowerCase()
-              .contains(_searchQuery.toLowerCase()) ||
-          (pet['breed'] as String)
-              .toLowerCase()
-              .contains(_searchQuery.toLowerCase()) ||
-          (pet['location'] as String)
-              .toLowerCase()
-              .contains(_searchQuery.toLowerCase());
-      return matchFilter && matchSearch;
-    }).toList();
-  }
+  Color _typeBg(String type) => switch (type) {
+        'Dog' => const Color(0xFFFFF0E6),
+        'Cat' => const Color(0xFFF3EFFE),
+        'Bird' => const Color(0xFFE0F7FA),
+        'Rabbit' => const Color(0xFFDCFCE7),
+        _ => _greenLight,
+      };
+
+  IconData _typeIcon(String type) => switch (type) {
+        'Cat' => Icons.catching_pokemon_rounded,
+        'Bird' => Icons.flutter_dash_rounded,
+        'Rabbit' => Icons.cruelty_free_rounded,
+        _ => Icons.pets_rounded,
+      };
 
   @override
   void initState() {
@@ -150,14 +62,18 @@ class _AdoptionScreenState extends State<AdoptionScreen>
     _loadSavedStatus();
   }
 
-  // Load saved status from Firestore on init
+  // Load saved status from Firestore
   Future<void> _loadSavedStatus() async {
-    for (final pet in _allPets) {
-      final saved = await SavedPostsService.isSaved(pet['name'] as String);
+    try {
+      final posts = await SavedPostsService.savedPostsStream().first;
       if (mounted) {
-        setState(() => pet['saved'] = saved);
+        setState(() {
+          for (final p in posts) {
+            _savedIds.add(p['name'] as String);
+          }
+        });
       }
-    }
+    } catch (_) {}
   }
 
   @override
@@ -167,43 +83,54 @@ class _AdoptionScreenState extends State<AdoptionScreen>
     super.dispose();
   }
 
-  // Toggle save with Firestore sync
-  Future<void> _toggleSave(Map<String, dynamic> pet) async {
-    final isSaved = pet['saved'] as bool;
-    setState(() => pet['saved'] = !isSaved);
-
+  Future<void> _toggleSave(AdoptionPost post) async {
+    final isSaved = _savedIds.contains(post.id);
+    setState(() {
+      if (isSaved)
+        _savedIds.remove(post.id);
+      else
+        _savedIds.add(post.id);
+    });
     try {
       if (!isSaved) {
-        await SavedPostsService.savePost(pet);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('${pet['name']} saved! View in Profile → Saved posts',
-                style: GoogleFonts.nunito(fontWeight: FontWeight.w600)),
-            backgroundColor: _green,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(16),
-          ));
-        }
+        await SavedPostsService.savePost({
+          'name': post.name,
+          'type': post.type,
+          'breed': post.breed,
+          'age': post.age,
+          'gender': post.gender,
+          'location': post.location,
+          'description': post.description,
+          'vaccinated': post.vaccinated,
+          'neutered': post.neutered,
+          'contact': post.contact,
+        });
+        if (mounted) _snack('${post.name} saved! 🐾', _green);
       } else {
-        await SavedPostsService.unsavePost(pet['name'] as String);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('${pet['name']} removed from saved',
-                style: GoogleFonts.nunito(fontWeight: FontWeight.w600)),
-            backgroundColor: const Color(0xFFE11D48),
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            margin: const EdgeInsets.all(16),
-          ));
-        }
+        await SavedPostsService.unsavePost(post.name);
+        if (mounted)
+          _snack('${post.name} removed from saved', const Color(0xFFE11D48));
       }
     } catch (_) {
-      // Revert on error
-      if (mounted) setState(() => pet['saved'] = isSaved);
+      if (mounted)
+        setState(() {
+          if (isSaved)
+            _savedIds.add(post.id);
+          else
+            _savedIds.remove(post.id);
+        });
     }
+  }
+
+  void _snack(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content:
+          Text(msg, style: GoogleFonts.nunito(fontWeight: FontWeight.w600)),
+      backgroundColor: color,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      margin: const EdgeInsets.all(16),
+    ));
   }
 
   @override
@@ -217,12 +144,15 @@ class _AdoptionScreenState extends State<AdoptionScreen>
             _buildHeader(),
             _buildSearchBar(),
             _buildFilterChips(),
-            Expanded(child: _buildPetGrid()),
+            Expanded(child: _buildPostList()),
           ]),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showPostAdoptionSheet(context),
+        onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => const CreateAdoptionPostScreen())),
         backgroundColor: _green,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
         label: Text('Post pet',
@@ -247,19 +177,45 @@ class _AdoptionScreenState extends State<AdoptionScreen>
             Text('Find your perfect companion',
                 style: GoogleFonts.nunito(fontSize: 13, color: _textMuted)),
           ]),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-                color: _greenLight, borderRadius: BorderRadius.circular(20)),
-            child: Row(children: [
-              const Icon(Icons.pets_rounded, size: 14, color: _green),
-              const SizedBox(width: 4),
-              Text('${_filtered.length} pets',
-                  style: GoogleFonts.nunito(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: _green)),
-            ]),
+          // Pending requests badge
+          StreamBuilder<int>(
+            stream: AdoptionRequestService.pendingCountStream(),
+            builder: (_, snap) {
+              final count = snap.data ?? 0;
+              return GestureDetector(
+                onTap: count > 0
+                    ? () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const AdoptionRequestsScreen()))
+                    : null,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                      color: count > 0 ? const Color(0xFFFFF0E6) : _greenLight,
+                      borderRadius: BorderRadius.circular(20)),
+                  child: Row(children: [
+                    Icon(
+                        count > 0
+                            ? Icons.notifications_active_rounded
+                            : Icons.public_rounded,
+                        size: 14,
+                        color: count > 0 ? const Color(0xFFEA580C) : _green),
+                    const SizedBox(width: 4),
+                    Text(
+                        count > 0
+                            ? '$count request${count > 1 ? 's' : ''}'
+                            : 'Public',
+                        style: GoogleFonts.nunito(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color:
+                                count > 0 ? const Color(0xFFEA580C) : _green)),
+                  ]),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -307,7 +263,7 @@ class _AdoptionScreenState extends State<AdoptionScreen>
   }
 
   Widget _buildFilterChips() {
-    final filters = ['All', 'Dog', 'Cat', 'Rabbit', 'Bird'];
+    final filters = ['All', 'Dog', 'Cat', 'Rabbit', 'Bird', 'Other'];
     return SizedBox(
       height: 52,
       child: ListView.builder(
@@ -339,110 +295,175 @@ class _AdoptionScreenState extends State<AdoptionScreen>
     );
   }
 
-  Widget _buildPetGrid() {
-    if (_filtered.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off_rounded,
-                size: 56, color: _textMuted.withValues(alpha: 0.4)),
-            const SizedBox(height: 12),
-            Text('No pets found',
-                style: GoogleFonts.nunito(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: _textMuted)),
-            Text('Try a different filter or search',
-                style: GoogleFonts.nunito(fontSize: 13, color: _textMuted)),
-          ],
-        ),
-      );
-    }
+  Widget _buildPostList() {
+    return StreamBuilder<List<AdoptionPost>>(
+      stream: AdoptionPostService.postsStream(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: _green));
+        }
 
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 100),
-      physics: const BouncingScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.72,
-      ),
-      itemCount: _filtered.length,
-      itemBuilder: (_, i) => _buildPetCard(_filtered[i]),
+        var posts = snap.data ?? [];
+        if (_selectedFilter != 'All') {
+          posts = posts.where((p) => p.type == _selectedFilter).toList();
+        }
+        if (_searchQuery.isNotEmpty) {
+          final q = _searchQuery.toLowerCase();
+          posts = posts
+              .where((p) =>
+                  p.name.toLowerCase().contains(q) ||
+                  p.breed.toLowerCase().contains(q) ||
+                  p.location.toLowerCase().contains(q))
+              .toList();
+        }
+
+        if (posts.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                    snap.data?.isEmpty == true
+                        ? Icons.pets_rounded
+                        : Icons.search_off_rounded,
+                    size: 56,
+                    color: _textMuted.withValues(alpha: 0.4)),
+                const SizedBox(height: 12),
+                Text(
+                    snap.data?.isEmpty == true
+                        ? 'No adoption posts yet'
+                        : 'No pets found',
+                    style: GoogleFonts.nunito(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: _textMuted)),
+                Text(
+                    snap.data?.isEmpty == true
+                        ? 'Be the first to post a pet!'
+                        : 'Try a different filter',
+                    style: GoogleFonts.nunito(fontSize: 13, color: _textMuted)),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 100),
+          physics: const BouncingScrollPhysics(),
+          itemCount: (posts.length / 2).ceil(),
+          itemBuilder: (_, rowIndex) {
+            final left = rowIndex * 2;
+            final right = left + 1;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: _buildPostCard(posts[left])),
+                  const SizedBox(width: 12),
+                  right < posts.length
+                      ? Expanded(child: _buildPostCard(posts[right]))
+                      : const Expanded(child: SizedBox()),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildPetCard(Map<String, dynamic> pet) {
-    final color = pet['color'] as Color;
-    final bg = pet['bg'] as Color;
+  Widget _buildPostCard(AdoptionPost post) {
+    final color = _typeColor(post.type);
+    final bg = _typeBg(post.type);
+    final isSaved = _savedIds.contains(post.id);
+    final isOwner = FirebaseAuth.instance.currentUser?.uid == post.postedBy;
 
     return GestureDetector(
-      onTap: () => _showPetDetail(context, pet),
+      onTap: () => _showPostDetail(context, post),
       child: Container(
         decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: const Color(0xFFE5F0EA))),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Image area
             Container(
-              height: 130,
+              height: 120,
               decoration: BoxDecoration(
                   color: bg,
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(16))),
               child: Stack(children: [
                 Center(
-                    child: Icon(pet['icon'] as IconData,
-                        size: 64, color: color.withValues(alpha: 0.8))),
+                    child: Icon(_typeIcon(post.type),
+                        size: 56, color: color.withValues(alpha: 0.8))),
 
-                // ── Save button — Firestore synced ──
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: GestureDetector(
-                    onTap: () => _toggleSave(pet),
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.08),
-                                blurRadius: 4)
-                          ]),
-                      child: Icon(
-                          pet['saved'] as bool
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          size: 16,
-                          color: pet['saved'] as bool
-                              ? const Color(0xFFE11D48)
-                              : _textMuted),
+                // Save button — only for non-owners
+                if (!isOwner)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: () => _toggleSave(post),
+                      child: Container(
+                        width: 30,
+                        height: 30,
+                        decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.08),
+                                  blurRadius: 4)
+                            ]),
+                        child: Icon(
+                            isSaved
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            size: 15,
+                            color:
+                                isSaved ? const Color(0xFFE11D48) : _textMuted),
+                      ),
                     ),
                   ),
-                ),
 
                 // Vaccinated badge
-                if (pet['vaccinated'] as bool)
+                if (post.vaccinated)
                   Positioned(
-                    bottom: 8,
-                    left: 8,
+                    bottom: 6,
+                    left: 6,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                          horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
                           color: _green,
                           borderRadius: BorderRadius.circular(20)),
                       child: Text('Vaccinated',
                           style: GoogleFonts.nunito(
-                              fontSize: 9,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white)),
+                    ),
+                  ),
+
+                // My post badge
+                if (isOwner)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                          color: const Color(0xFF8B5CF6),
+                          borderRadius: BorderRadius.circular(20)),
+                      child: Text('My post',
+                          style: GoogleFonts.nunito(
+                              fontSize: 8.5,
                               fontWeight: FontWeight.w700,
                               color: Colors.white)),
                     ),
@@ -451,64 +472,91 @@ class _AdoptionScreenState extends State<AdoptionScreen>
             ),
 
             // Info
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(pet['name'] as String,
-                            style: GoogleFonts.nunito(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                color: _textMain)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                              color: bg,
-                              borderRadius: BorderRadius.circular(20)),
-                          child: Text(
-                              pet['gender'] as String == 'Male' ? '♂' : '♀',
-                              style: TextStyle(fontSize: 12, color: color)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(pet['breed'] as String,
-                        style: GoogleFonts.nunito(
-                            fontSize: 11, color: _textMuted)),
-                    const SizedBox(height: 6),
-                    Row(children: [
-                      const Icon(Icons.access_time_rounded,
-                          size: 12, color: Color(0xFF9CA3AF)),
-                      const SizedBox(width: 3),
-                      Text(pet['age'] as String,
-                          style: GoogleFonts.nunito(
-                              fontSize: 11, color: _textMuted)),
-                      const SizedBox(width: 8),
-                      const Icon(Icons.location_on_outlined,
-                          size: 12, color: Color(0xFF9CA3AF)),
-                      const SizedBox(width: 2),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
                       Expanded(
-                          child: Text(pet['location'] as String,
+                          child: Text(post.name,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.nunito(
-                                  fontSize: 11, color: _textMuted))),
-                    ]),
-                    const Spacer(),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: _textMain))),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: bg, borderRadius: BorderRadius.circular(20)),
+                        child: Text(post.gender == 'Male' ? '♂' : '♀',
+                            style: TextStyle(fontSize: 11, color: color)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(post.breed.isEmpty ? post.type : post.breed,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.nunito(
+                          fontSize: 10.5, color: _textMuted)),
+                  const SizedBox(height: 5),
+                  Row(children: [
+                    const Icon(Icons.access_time_rounded,
+                        size: 11, color: Color(0xFF9CA3AF)),
+                    const SizedBox(width: 2),
+                    Text(post.age,
+                        style: GoogleFonts.nunito(
+                            fontSize: 10, color: _textMuted)),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.location_on_outlined,
+                        size: 11, color: Color(0xFF9CA3AF)),
+                    const SizedBox(width: 2),
+                    Expanded(
+                        child: Text(post.location,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.nunito(
+                                fontSize: 10, color: _textMuted))),
+                  ]),
+                  const SizedBox(height: 10),
+
+                  // ── Owner: "View requests" | Others: "Adopt" ──
+                  if (isOwner)
                     SizedBox(
                       width: double.infinity,
+                      height: 34,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    const AdoptionRequestsScreen())),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF8B5CF6),
+                          side: const BorderSide(color: Color(0xFF8B5CF6)),
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.inbox_outlined, size: 14),
+                        label: Text('View requests',
+                            style: GoogleFonts.nunito(
+                                fontSize: 11, fontWeight: FontWeight.w700)),
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      height: 34,
                       child: ElevatedButton(
-                        onPressed: () => _showPetDetail(context, pet),
+                        onPressed: () => _showPostDetail(context, post),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _green,
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          padding: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10)),
                         ),
@@ -517,8 +565,7 @@ class _AdoptionScreenState extends State<AdoptionScreen>
                                 fontSize: 12, fontWeight: FontWeight.w700)),
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
             ),
           ],
@@ -527,17 +574,19 @@ class _AdoptionScreenState extends State<AdoptionScreen>
     );
   }
 
-  void _showPetDetail(BuildContext context, Map<String, dynamic> pet) {
-    final color = pet['color'] as Color;
-    final bg = pet['bg'] as Color;
+  void _showPostDetail(BuildContext context, AdoptionPost post) {
+    final color = _typeColor(post.type);
+    final bg = _typeBg(post.type);
+    final isSaved = _savedIds.contains(post.id);
+    final isOwner = FirebaseAuth.instance.currentUser?.uid == post.postedBy;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.92,
+        initialChildSize: 0.75,
+        maxChildSize: 0.95,
         minChildSize: 0.5,
         builder: (_, ctrl) => Container(
           decoration: const BoxDecoration(
@@ -561,21 +610,21 @@ class _AdoptionScreenState extends State<AdoptionScreen>
                 decoration: BoxDecoration(
                     color: bg, borderRadius: BorderRadius.circular(16)),
                 child: Center(
-                    child:
-                        Icon(pet['icon'] as IconData, size: 72, color: color)),
+                    child: Icon(_typeIcon(post.type), size: 72, color: color)),
               ),
               const SizedBox(height: 20),
 
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text(pet['name'] as String,
-                    style: GoogleFonts.nunito(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0A2E24))),
+                Expanded(
+                    child: Text(post.name,
+                        style: GoogleFonts.nunito(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0A2E24)))),
                 Row(children: [
-                  if (pet['vaccinated'] as bool)
+                  if (post.vaccinated)
                     _badge('Vaccinated', _green, _greenLight),
-                  if (pet['neutered'] as bool) ...[
+                  if (post.neutered) ...[
                     const SizedBox(width: 6),
                     _badge('Neutered', const Color(0xFF0891B2),
                         const Color(0xFFE0F7FA)),
@@ -583,15 +632,24 @@ class _AdoptionScreenState extends State<AdoptionScreen>
                 ]),
               ]),
               const SizedBox(height: 6),
-              Text('${pet['breed']} · ${pet['age']} · ${pet['gender']}',
+              Text(
+                  '${post.breed.isEmpty ? post.type : post.breed} · ${post.age} · ${post.gender}',
                   style: GoogleFonts.nunito(fontSize: 14, color: _textMuted)),
               const SizedBox(height: 4),
               Row(children: [
                 const Icon(Icons.location_on_outlined,
                     size: 14, color: Color(0xFF9CA3AF)),
                 const SizedBox(width: 4),
-                Text(pet['location'] as String,
+                Text(post.location,
                     style: GoogleFonts.nunito(fontSize: 13, color: _textMuted)),
+              ]),
+              const SizedBox(height: 4),
+              Row(children: [
+                const Icon(Icons.person_outline_rounded,
+                    size: 14, color: Color(0xFF9CA3AF)),
+                const SizedBox(width: 4),
+                Text('Posted by ${post.postedByName}',
+                    style: GoogleFonts.nunito(fontSize: 12, color: _textMuted)),
               ]),
               const SizedBox(height: 16),
 
@@ -601,127 +659,208 @@ class _AdoptionScreenState extends State<AdoptionScreen>
                       fontWeight: FontWeight.w700,
                       color: const Color(0xFF0A2E24))),
               const SizedBox(height: 8),
-              Text(pet['description'] as String,
+              Text(post.description,
                   style: GoogleFonts.nunito(
                       fontSize: 14,
                       color: const Color(0xFF6B8F80),
                       height: 1.6)),
-              const SizedBox(height: 24),
 
-              // Save button inside detail sheet
-              OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _toggleSave(pet);
-                },
-                style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFE11D48),
-                    side: const BorderSide(color: Color(0xFFE11D48)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14))),
-                icon: Icon(
-                    pet['saved'] as bool
-                        ? Icons.favorite_rounded
-                        : Icons.favorite_border_rounded,
-                    size: 18),
-                label: Text(
-                    pet['saved'] as bool
-                        ? 'Remove from saved'
-                        : 'Save to wishlist',
-                    style: GoogleFonts.nunito(
-                        fontSize: 14, fontWeight: FontWeight.w700)),
-              ),
-              const SizedBox(height: 12),
+              if (post.contact.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                      color: _greenLight,
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Row(children: [
+                    const Icon(Icons.phone_outlined, size: 18, color: _green),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Contact',
+                              style: GoogleFonts.nunito(
+                                  fontSize: 11, color: _textMuted)),
+                          Text(post.contact,
+                              style: GoogleFonts.nunito(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: _textMain)),
+                        ],
+                      ),
+                    ),
+                  ]),
+                ),
+              ],
 
-              SizedBox(
-                height: 52,
-                child: ElevatedButton.icon(
+              const SizedBox(height: 20),
+
+              // Save — only non-owners
+              if (!isOwner) ...[
+                OutlinedButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(
-                          'Adoption request sent for ${pet['name']}! 🐾',
-                          style:
-                              GoogleFonts.nunito(fontWeight: FontWeight.w600)),
-                      backgroundColor: _green,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                      margin: const EdgeInsets.all(16),
-                    ));
+                    _toggleSave(post);
                   },
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: _green,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
+                  style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFE11D48),
+                      side: const BorderSide(color: Color(0xFFE11D48)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14))),
-                  icon: const Icon(Icons.favorite_rounded, size: 18),
-                  label: Text('Send adoption request',
+                  icon: Icon(
+                      isSaved
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      size: 18),
+                  label: Text(
+                      isSaved ? 'Remove from saved' : 'Save to wishlist',
                       style: GoogleFonts.nunito(
-                          fontSize: 15, fontWeight: FontWeight.w700)),
+                          fontSize: 14, fontWeight: FontWeight.w700)),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+                const SizedBox(height: 12),
 
-  void _showPostAdoptionSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Padding(
-        padding:
-            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: Container(
-          decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                  child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                          color: const Color(0xFFE5E7EB),
-                          borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: 20),
-              Text('Post a pet for adoption',
-                  style: GoogleFonts.nunito(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: _textMain)),
-              const SizedBox(height: 6),
-              Text('Help a pet find a loving home by posting their profile.',
-                  style: GoogleFonts.nunito(fontSize: 13, color: _textMuted)),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 52,
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: _green,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14))),
-                  icon: const Icon(Icons.add_a_photo_outlined, size: 18),
-                  label: Text('Create adoption post',
-                      style: GoogleFonts.nunito(
-                          fontSize: 15, fontWeight: FontWeight.w700)),
+                // ── Send adoption request with contact dialog ──
+                SizedBox(
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final contactCtrl = TextEditingController();
+                      final contact = await showDialog<String>(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                          title: Text('Your contact info',
+                              style: GoogleFonts.nunito(
+                                  fontWeight: FontWeight.w800,
+                                  color: _textMain)),
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('The pet owner will see your contact',
+                                  style: GoogleFonts.nunito(
+                                      fontSize: 12, color: _textMuted)),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: contactCtrl,
+                                style: GoogleFonts.nunito(fontSize: 14),
+                                decoration: InputDecoration(
+                                  hintText: 'Phone or email',
+                                  hintStyle: TextStyle(
+                                      color: _textMuted.withValues(alpha: 0.5)),
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                  focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: const BorderSide(
+                                          color: _green, width: 1.5)),
+                                ),
+                              ),
+                            ],
+                          ),
+                          actions: [
+                            TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: Text('Cancel',
+                                    style: GoogleFonts.nunito(
+                                        color: _textMuted,
+                                        fontWeight: FontWeight.w600))),
+                            ElevatedButton(
+                                onPressed: () => Navigator.pop(
+                                    context, contactCtrl.text.trim()),
+                                style: ElevatedButton.styleFrom(
+                                    backgroundColor: _green,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(10))),
+                                child: Text('Send request',
+                                    style: GoogleFonts.nunito(
+                                        fontWeight: FontWeight.w700))),
+                          ],
+                        ),
+                      );
+
+                      if (contact != null && contact.isNotEmpty) {
+                        await AdoptionRequestService.sendRequest(
+                          postId: post.id,
+                          petName: post.name,
+                          petType: post.type,
+                          ownerId: post.postedBy,
+                          contact: contact,
+                        );
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          _snack(
+                              'Request sent for ${post.name}! Owner will contact you. 🐾',
+                              _green);
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: _green,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14))),
+                    icon: const Icon(Icons.favorite_rounded, size: 18),
+                    label: Text('Send adoption request',
+                        style: GoogleFonts.nunito(
+                            fontSize: 15, fontWeight: FontWeight.w700)),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
+              ],
+
+              // Owner: view requests + delete
+              if (isOwner) ...[
+                SizedBox(
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const AdoptionRequestsScreen()));
+                    },
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14))),
+                    icon: const Icon(Icons.inbox_outlined, size: 18),
+                    label: Text('View adoption requests',
+                        style: GoogleFonts.nunito(
+                            fontSize: 15, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      await AdoptionPostService.deletePost(post.id);
+                      if (context.mounted) {
+                        _snack('Post deleted', const Color(0xFFDC2626));
+                      }
+                    },
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFDC2626),
+                        side: const BorderSide(color: Color(0xFFDC2626)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14))),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: Text('Delete my post',
+                        style: GoogleFonts.nunito(
+                            fontSize: 14, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
